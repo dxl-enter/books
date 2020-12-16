@@ -44,3 +44,132 @@
 22. 纯数据类（Data Class）:找出这些取值/设值函数被其他类调用的地点。尝试以搬移函数（198）把那些调用行为搬移到纯数据类里来。如果无法搬移整个函数，就运用提炼函数（106）产生一个可被搬移的函数。
 23. 被拒绝的遗赠（Refused Bequest）:不建议你每次都这么做：所有超类都应该是抽象（abstract）的。如果子类复用了超类的行为（实现），却又不愿意支持超类的接口，“被拒绝的遗赠”的坏味道就会变得很浓烈。拒绝继承超类的实现，这一点我们不介意；但如果拒绝支持超类的接口，这就难以接受了。既然不愿意支持超类的接口，就不要虚情假意地糊弄继承体系，应该运用以委托取代子类（381）或者以委托取代超类（399）彻底划清界限。
 24. 注释（Comments）:如果你需要注释来解释一块代码做了什么，试试提炼函数（106）；如果函数已经提炼出来，但还是需要注释来解释其行为，试试用改变函数声明（124）为它改名；如果你需要注释说明某些系统的需求规格，试试引入断言（302）。当你感觉需要撰写注释时，请先尝试重构，试着让所有注释都变得多余。你可以在注释里写下自己“为什么做某某事”。这类信息可以帮助将来的修改者，尤其是那些健忘的家伙。
+# 构筑测试体系
+1. 自测试代码的价值:他们编写代码的时间仅占所有时间中很少的一部分。有些时间用来决定下一步干什么，有些时间花在设计上，但是，花费在调试上的时间是最多的。确保所有测试都完全自动化，让它们检查自己的测试结果。每天我都会添加一些新功能，同时也添加相应的测试。这样，我很少花超过几分钟的时间来追查回归错误。一套测试就是一个强大的bug侦测器，能够大大缩减查找bug所需的时间。撰写测试代码的最好时机是在开始动手编码之前。当我需要添加特性时，我会先编写相应的测试代码。为了添加这个功能，我需要实现些什么？编写测试代码还能帮我把注意力集中于接口而非实现（这永远是一件好事）。预先写好的测试代码也为我的工作安上一个明确的结束标志：一旦测试代码正常运行，工作就可以结束了。
+Kent Beck将这种先写测试的习惯提炼成一门技艺，叫测试驱动开发（Test-Driven Development，TDD
+2. 待测试的示例代码: 我只会聚焦于软件的业务逻辑部分，也就是那些计算利润和缺额的类，而非那些生成HTML或监听页面字段更新的代码。本章只是先带你走进自测试代码世界的大门，因而最好是从最简单的例子开始，也就是那些不涉及用户界面、持久化或外部服务交互的代码。这种隔离的思路其实在任何场景下都适用：一旦业务逻辑的部分开始变复杂，我就会把它与UI分离开，以便能更好地理解和测试它。这块业务逻辑代码涉及两个类：一个代表了单个生产商（ Producer ），另一个用来描述一个行省（ Province ）。 Province 类的构造函数接收一个JavaScript对象，这个对象的内容我们可以想象是由一个JSON文件提供的。
+
+```
+class Province...
+constructor(doc) {
+　this._name = doc.name;
+　this._producers = [];
+　this._totalProduction = 0;
+　this._demand = doc.demand;
+　this._price = doc.price;
+　doc.producers.forEach(d => this.addProducer(new Producer(this, d)));
+}
+
+addProducer(arg) {
+　this._producers.push(arg);
+　this._totalProduction += arg.production;
+}
+```
+
+下面的函数会创建可用的JSON数据，我可以用它的返回值来构造一个行省对象，并拿这个对象来做测试。
+顶层作用域...
+
+```
+function sampleProvinceData() {
+　return {
+　　name: "Asia",
+　　producers: [
+　　　{name: "Byzantium", cost: 10, production: 9},
+　　　{name: "Attalia",   cost: 12, production: 10},
+　　　{name: "Sinope",    cost: 10, production: 6},
+　　],
+　　demand: 30,
+　　price: 20
+　};
+}
+```
+
+行省类中有许多设值函数和取值函数，它们用于获取各类数据的值。
+class Province...
+
+```
+class Province...
+get name()    {return this._name;}
+get producers() {return this._producers.slice();}
+get totalProduction()    {return this._totalProduction;}
+set totalProduction(arg) {this._totalProduction = arg;}
+get demand()    {return this._demand;}
+set demand(arg) {this._demand = parseInt(arg);}
+get price()    {return this._price;}
+set price(arg) {this._price = parseInt(arg);}
+```
+
+设值函数会被UI端调用，接收一个包含数值的字符串。我需要将它们转换成数值，以便在后续的计算中使用。
+代表生产商的 Producer 类则基本只是一个存放数据的容器。
+
+```
+class Producer...
+constructor(aProvince, data) {
+　this._province = aProvince;
+　this._cost = data.cost;
+　this._name = data.name;
+　this._production = data.production || 0;
+}
+get name() {return this._name;}
+get cost() {return this._cost;}
+set cost(arg) {this._cost = parseInt(arg);}
+get production() {return this._production;}
+set production(amountStr) {
+　const amount = parseInt(amountStr);
+　const newProduction = Number.isNaN(amount) ? 0 : amount;
+　this._province.totalProduction += newProduction - this._production;
+　this._production = newProduction;
+}
+```
+
+在设值函数 production 中更新派生数据的方式有点丑陋，每当看到这种代码，我便想通过重构帮它改头换面。但在重构之前，我必须记得先为它添加测试。
+缺额的计算逻辑也很简单。
+
+```
+class Province...
+get shortfall() {
+　return this._demand - this.totalProduction;
+}
+```
+
+计算利润的逻辑则要相对复杂一些。
+
+```
+class Province...
+get profit() {
+　return this.demandValue - this.demandCost;
+}
+get demandCost() {
+　let remainingDemand = this.demand;
+　let result = 0;
+　this.producers
+　　.sort((a,b) => a.cost - b.cost)
+　　.forEach(p => {
+　　　const contribution = Math.min(remainingDemand, p.production);
+　　　　remainingDemand -= contribution;
+　　　　result += contribution * p.cost;
+　　});
+　return result;
+}
+get demandValue() {
+　return this.satisfiedDemand * this.price;
+}
+get satisfiedDemand() {
+　return Math.min(this._demand, this.totalProduction);
+}
+```
+
+3. 第一个测试
+开始测试这份代码前，我需要一个测试框架。JavaScript世界里这样的框架有很多，这里我选用的是使用度和声誉都还不错的Mocha。我不打算全面讲解框架的使用，而只会用它写一些测试作为例子。看完之后，你应该能轻松地学会用别的框架来编写类似的测试。
+
+以下是为缺额计算过程编写的一个简单的测试：
+
+```
+describe('province', function() {
+　it('shortfall', function() {
+　　const asia = new Province(sampleProvinceData());
+　　assert.equal(asia.shortfall, 5);
+　});
+});
+```
+Mocha框架组织测试代码的方式是将其分组，每一组下包含一套相关的测试。测试需要写在一个 it 块中。对于这个简单的例子，测试包含了两个步骤。第一步设置好一些测试夹具（fixture），也就是测试所需要的数据和对象等（就本例而言是一个加载好了的行省对象）；第二步则是验证测试夹具是否具备某些特征（就本例而言则是验证算出的缺额应该是期望的值）。
