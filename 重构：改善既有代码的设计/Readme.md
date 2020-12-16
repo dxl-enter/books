@@ -173,3 +173,70 @@ describe('province', function() {
 });
 ```
 Mocha框架组织测试代码的方式是将其分组，每一组下包含一套相关的测试。测试需要写在一个 it 块中。对于这个简单的例子，测试包含了两个步骤。第一步设置好一些测试夹具（fixture），也就是测试所需要的数据和对象等（就本例而言是一个加载好了的行省对象）；第二步则是验证测试夹具是否具备某些特征（就本例而言则是验证算出的缺额应该是期望的值）。
+
+特别是有很多测试在运行时，我总会担心测试没有按我期望的方式检查结果，从而没法在实际出错的时候抓到bug。因此编写测试时，我想看到每个测试都至少失败一遍。我最爱的方式莫过于在代码中暂时引入一个错误，像这样：
+
+```
+class Province...
+get shortfall() {
+　return this._demand - this.totalProduction * 2;
+}
+```
+
+框架会报告哪个测试失败了，并给出失败的根本原因——这里是因为实际算出的值与期望的值不相符。于是我总算见到有什么东西失败了，并且还能马上看到是哪个测试失败，获得一些出错的线索（这个例子中，我还能确认这就是我引入的那个错误）。
+
+Mocha框架允许使用不同的库（它称之为断言库）来验证测试的正确性。JavaScript世界的断言库，连在一起都可以绕地球一周了，当你读到这里时，可能有些仍然还没过时。我现在使用的库是Chai，它可以支持我编写不同类型的断言
+
+```
+比如“assert”风格的：
+describe('province', function() { 
+　it('shortfall', function() {
+　　const asia = new Province(sampleProvinceData());
+　　assert.equal(asia.shortfall, 5);
+　});
+});
+
+或者是“expect”风格的：
+describe('province', function() {
+　it('shortfall', function() {
+　　const asia = new Province(sampleProvinceData());
+　　expect(asia.shortfall).equal(5);
+　});
+});
+
+一般来讲我更倾向于使用assert风格的断言，但使用JavaScript时我倒是更常使用expect的风格。
+```
+图形化测试界面的确很棒，但并不是必需的。我通常会在Emacs中配置一个运行测试的快捷键，然后在编译窗口中观察纯文本的反馈。要点在于，我必须能快速地知道测试是否全部都通过了。
+
+4. 再添加一个测试
+现在，我将继续添加更多测试。我遵循的风格是：观察被测试类应该做的所有事情，然后对这个类的每个行为进行测试，包括各种可能使它发生异常的边界条件。这不同于某些程序员提倡的“测试所有 public 函数”的风格。记住，测试应该是一种风险驱动的行为，我测试的目标是希望找出现在或未来可能出现的bug。所以我不会去测试那些仅仅读或写一个字段的访问函数，因为它们太简单了，不太可能出错。
+这一点很重要，因为如果尝试撰写过多测试，结果往往反而导致测试不充分。事实上，即使我只做一点点测试，也从中获益良多。测试的重点应该是那些我最担心出错的部分，这样就能从测试工作中得到最大利益。
+
+接下来，我的目光落到了代码的另一个主要输出上，也就是总利润的计算。我同样可以在一开始的测试夹具上，对总利润做一个基本的测试。
+
+```
+describe('province', function() {
+　it('shortfall', function() {
+　　const asia = new Province(sampleProvinceData());
+　　expect(asia.shortfall).equal(5);
+　});
+　it('profit', function() {
+　　const asia = new Province(sampleProvinceData());
+　　expect(asia.profit).equal(230);
+　});
+});
+```
+这个模式是我为既有代码添加测试时最常用的方法：先随便填写一个期望值，再用程序产生的真实值来替换它，然后引入一个错误，最后恢复错误。
+这个测试随即产生了一些重复代码——它们都在第一行里初始化了同一个测试夹具。正如我对一般的重复代码抱持怀疑，测试代码中的重复同样令我心生疑惑，因此我要试着将它们提到一处公共的地方，以此来消灭重复。一种方案就是把常量提取到外层作用域里。
+
+```
+describe('province', function() {
+　const asia = new Province(sampleProvinceData()); // DON'T DO THIS
+　it('shortfall', function() {
+　　expect(asia.shortfall).equal(5);
+　});
+　it('profit', function() {
+　　expect(asia.profit).equal(230);
+　});
+});
+```
